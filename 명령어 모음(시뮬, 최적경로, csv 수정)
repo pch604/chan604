@@ -1,0 +1,25 @@
+docker stop bd
+docker start bd
+docker exec -it bd bash
+source /opt/ros/foxy/setup.bash
+source install/setup.bash
+
+lane_generator 사용하기
+conda activate traj_generator
+cd /mnt/d/my_trajectory_project/trajectory_generator
+export PYTHONNOUSERSITE=1
+python3 lane_generator.py
+
+최적경로생성
+python3 main_globaltraj.py
+
+csv수정할때 이 명령어 쓰기.
+chan@BOOK-J2K49LONUL:/$ cd /mnt/d/my_trajectory_project/trajectory_generator
+chan@BOOK-J2K49LONUL:/mnt/d/my_trajectory_project/trajectory_generator$ python3 editor_final_explained.py 111.csv
+
+수동 웨이포인트
+conda activate wpgen
+cd wpgen_manual/
+python3 wpgen_manual.py ./map/이름.png
+
+C:\Users\cksgu\Videos\Captures\0110기본형
