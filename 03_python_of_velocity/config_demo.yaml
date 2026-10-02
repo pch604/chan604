@@ -1,0 +1,40 @@
+# 합성 데모 데이터용 설정 (make_demo_data.py 출력)
+dataset:
+  root: ../data/demo_raw
+  imu_csv: imu.csv
+  lrf_csv: lrf.csv
+  cam_csv: cam/timestamps.csv
+  cam_dir: cam
+  gt_csv: gt.csv
+  time_scale: 1.0                 # timestamp 단위 → 초 (ns 이면 1.0e-9)
+  columns:                        # {표준이름: CSV 헤더}
+    imu: {t: t, wx: wx, wy: wy, wz: wz, ax: ax, ay: ay, az: az}
+    lrf: {t: t, range: range}
+    cam: {t: t, file: file}
+    gt:  {t: t, px: px, py: py, pz: pz, vx: vx, vy: vy, vz: vz, qw: qw, qx: qx, qy: qy, qz: qz}
+
+calib_file: ../data/demo_raw/calib.yaml   # K, D, R_BC, r_BC, timeshift_cam_imu, lrf_delay
+calib:
+  proc_latency: 0.030             # OF 계산 지연 [s] → t_avail = t_k + proc_latency
+  lrf_min: 0.10                   # LRF 유효 범위 [m] (0 값 제거)
+  lrf_max: 25.0
+  lrf_max_gap: 0.15               # 보간 허용 최대 간격 [s]
+
+tracker:
+  backend: klt                    # klt | dis (OpenCV dense) | raft (딥러닝, torch 필요)
+  clahe: false                    # 저조도 대비 향상 (품질 비교 실험 시 끔)
+  max_corners: 300
+  quality_level: 0.01
+  min_distance: 10
+  win: 21
+  levels: 3
+  fb_thresh: 1.0                  # 정방향-역방향 오차 허용 [px]
+  min_tracks: 15
+  max_dt: 0.5                     # 영상 간격이 이보다 크면 측정 생성 안 함 [s]
+  huber_px: 1.0
+
+quality:
+  n_ref: 150                      # 이 개수 이상이면 특징점 수 점수 = 1
+  resid_ref_px: 1.0
+
+output_dir: ../data/demo

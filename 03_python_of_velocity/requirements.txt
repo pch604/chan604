@@ -1,0 +1,8 @@
+numpy
+scipy
+pandas
+pyyaml
+opencv-python        # (headless 환경이면 opencv-python-headless)
+# 선택: 딥러닝 Optical Flow(RAFT) 백엔드
+# torch
+# torchvision

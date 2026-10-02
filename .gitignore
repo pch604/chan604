@@ -1,0 +1,4 @@
+data/demo_raw/
+data/insane_raw/
+__pycache__/
+*.pyc

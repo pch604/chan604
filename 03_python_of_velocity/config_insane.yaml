@@ -1,0 +1,51 @@
+# INSANE 데이터셋 (Brommer et al., IJRR 2024) 용 설정 템플릿
+#   센서: nav camera(하향, 20 Hz) / PX4 IMU(200 Hz) / LRF Garmin Lidar Lite v3(30 Hz, 카메라와 co-mount)
+#   정답: 실내 = OptiTrack mocap(ground_truth.csv), 실외 = RTK GNSS(ground_truth_8hz/80hz.csv)
+#   ※ 아래 파일 경로/헤더 이름은 시퀀스를 내려받은 뒤 실제 CSV 헤더를 보고 반드시 수정 (TODO)
+dataset:
+  root: ../data/insane_raw/SEQUENCE_NAME          # TODO
+  imu_csv: px4_imu.csv                            # TODO
+  lrf_csv: lrf.csv                                # TODO
+  cam_csv: nav_cam/timestamps.csv                 # TODO (이미지 파일명-시간 표)
+  cam_dir: nav_cam                                # TODO
+  gt_csv: ground_truth.csv                        # TODO (없으면 지우기)
+  time_scale: 1.0                                 # TODO: ns 면 1.0e-9, us 면 1.0e-6
+  columns:                                        # {표준이름: 실제 헤더}  TODO
+    imu: {t: t, wx: w_x, wy: w_y, wz: w_z, ax: a_x, ay: a_y, az: a_z}
+    lrf: {t: t, range: range}
+    cam: {t: t, file: file}
+    gt:  {t: t, px: p_x, py: p_y, pz: p_z, qw: q_w, qx: q_x, qy: q_y, qz: q_z}
+
+calib:
+  # 데이터셋 제공 YAML(카메라-IMU 보정)에서 옮겨 적기.  Kalibr 형식이면 T_cam_imu 만 넣으면
+  # R_BC, r_BC 는 자동 계산됨.
+  K: [fx, fy, cx, cy]                             # TODO
+  dist_model: radtan                              # radtan | equidistant
+  D: [0.0, 0.0, 0.0, 0.0]                         # TODO
+  T_cam_imu: [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]   # TODO
+  timeshift_cam_imu: 0.0                          # TODO: Kalibr timeshift (t_imu = t_cam + shift)
+  lrf_delay: 0.0                                  # 모르면 0 → 나중에 상호상관으로 추정
+  proc_latency: 0.030
+  lrf_min: 0.10
+  lrf_max: 25.0                                   # 논문: 25~30 m 이상에서 0 값 출력
+  lrf_max_gap: 0.15
+
+tracker:
+  backend: klt
+  scale: 0.25                                     # 2056x1542 → 514x386
+  clahe: false
+  max_corners: 300
+  quality_level: 0.01
+  min_distance: 10
+  win: 21
+  levels: 3
+  fb_thresh: 1.0
+  min_tracks: 15
+  max_dt: 0.5
+  huber_px: 1.0
+
+quality:
+  n_ref: 150
+  resid_ref_px: 1.0
+
+output_dir: ../data/insane
