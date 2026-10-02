@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="900" viewBox="0 0 1000 900">
+  <defs>
+    <marker id="ah" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="14" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#26357A"/></marker>
+    <marker id="aho" markerUnits="userSpaceOnUse" markerWidth="18" markerHeight="18" refX="14" refY="9" orient="auto"><path d="M0,0 L18,9 L0,18 z" fill="#E07B39"/></marker>
+    <linearGradient id="fov" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7DB3E0" stop-opacity="0.55"/><stop offset="1" stop-color="#7DB3E0" stop-opacity="0.12"/></linearGradient>
+  </defs>
+  <!-- FOV cone -->
+  <polygon points="478,352 285,770 675,770" fill="url(#fov)"/>
+  <line x1="478" y1="352" x2="285" y2="770" stroke="#7DB3E0" stroke-width="3" stroke-dasharray="10 8"/>
+  <line x1="478" y1="352" x2="675" y2="770" stroke="#7DB3E0" stroke-width="3" stroke-dasharray="10 8"/>
+  <!-- ground -->
+  <rect x="140" y="770" width="720" height="70" rx="10" fill="#EEF2F8"/>
+  <line x1="140" y1="770" x2="860" y2="770" stroke="#26357A" stroke-width="5" stroke-linecap="round"/>
+  <!-- features + flow vectors -->
+  <g stroke="#26357A" stroke-width="4" fill="none">
+    <circle cx="330" cy="800" r="9"/><circle cx="410" cy="815" r="9"/><circle cx="500" cy="795" r="9"/>
+    <circle cx="575" cy="818" r="9"/><circle cx="640" cy="800" r="9"/>
+  </g>
+  <g stroke="#3B5BA9" stroke-width="4" marker-end="url(#ah)">
+    <line x1="318" y1="800" x2="288" y2="800"/><line x1="398" y1="815" x2="368" y2="815"/>
+    <line x1="488" y1="795" x2="458" y2="795"/><line x1="563" y1="818" x2="533" y2="818"/>
+    <line x1="628" y1="800" x2="598" y2="800"/>
+  </g>
+  <!-- range beam -->
+  <line x1="548" y1="352" x2="548" y2="762" stroke="#E07B39" stroke-width="5" stroke-dasharray="14 10"/>
+  <circle cx="548" cy="770" r="8" fill="#E07B39"/>
+  <!-- drone arms -->
+  <line x1="250" y1="292" x2="750" y2="292" stroke="#26357A" stroke-width="16" stroke-linecap="round"/>
+  <rect x="236" y="262" width="34" height="40" rx="6" fill="#26357A"/>
+  <rect x="730" y="262" width="34" height="40" rx="6" fill="#26357A"/>
+  <rect x="249" y="246" width="8" height="20" fill="#26357A"/>
+  <rect x="743" y="246" width="8" height="20" fill="#26357A"/>
+  <ellipse cx="253" cy="242" rx="120" ry="11" fill="#CFE2F4" stroke="#26357A" stroke-width="4"/>
+  <ellipse cx="747" cy="242" rx="120" ry="11" fill="#CFE2F4" stroke="#26357A" stroke-width="4"/>
+  <!-- body -->
+  <rect x="390" y="262" width="220" height="76" rx="22" fill="#26357A"/>
+  <!-- IMU chip -->
+  <rect x="478" y="280" width="44" height="40" rx="5" fill="#FFFFFF"/>
+  <g stroke="#26357A" stroke-width="3"><line x1="486" y1="292" x2="514" y2="292"/><line x1="486" y1="300" x2="514" y2="300"/><line x1="486" y1="308" x2="514" y2="308"/></g>
+  <!-- camera & range sensor under body -->
+  <rect x="456" y="336" width="44" height="22" rx="5" fill="#1B2559"/>
+  <circle cx="478" cy="352" r="8" fill="#7DB3E0"/>
+  <rect x="532" y="336" width="32" height="18" rx="4" fill="#E07B39"/>
+  <!-- velocity arrow -->
+  <line x1="640" y1="190" x2="800" y2="190" stroke="#26357A" stroke-width="7" marker-end="url(#ah)"/>
+</svg>
