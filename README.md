@@ -9,7 +9,9 @@
 01_연구계획발표/        연구계획 발표 PPT·PDF·대본 (이전 작업 브랜치에서 가져옴)
 02_논문정리/            참고 논문 3편 + 참고 코드(PX4, VINS/OpenVINS) 정리 → 무엇을 어디에 썼는지
 03_python_of_velocity/  ① OF → 회전 제거 → 속도 측정치 + 시간 동기화 (Python)
+                           of_velocity.py / inspect_dataset.py(실데이터 점검) / make_demo_data.py(합성)
 04_matlab_kf/           ② 상태 정의 → EKF → 위치 추정 → RMSE, 그림 (MATLAB)
+                           step1_linear_kf.m(기본 KF) → main_vio_kf.m(최종 EKF)
 data/demo/              Python 출력(합성 데이터) → MATLAB 입력.  바로 실행 가능
 99_기타/                예전 명령어 메모 (ROS / 경로 생성)
 ```
@@ -55,6 +57,8 @@ data/demo/              Python 출력(합성 데이터) → MATLAB 입력.  바�
 | 5 | 보정 + 주입 (`R ← R·Exp(δθ)`) | `lib/ekf_update.m` |
 | 6 | RMSE 표, 그림 6장 | `main_vio_kf.m` → `figures/` |
 
+이 표 앞 단계로 `step1_linear_kf.m`을 두었다. 상태 `[p; v]`, `F = [I dt·I; 0 I]`, `H = [0 I]`인 가장 기본적인 선형 KF로 같은 데이터를 처리한다. 자세는 정답을 빌려 쓴다. 위치 RMSE 1.32 m인 이 단계에서 2단계 C(0.22 m)로 가면서 무엇이 바뀌는지 파일 맨 위 주석에 정리했다.
+
 비교 방법: **A** IMU 단독 / **B** 고정 R / **C** 품질 기반 적응 R (제안) / **C0** C에서 지연 보정만 끔
 
 ## 실행 방법
@@ -73,7 +77,17 @@ cd 04_matlab_kf
 main_vio_kf
 ```
 
-실제 INSANE 데이터를 쓸 때는 `config_insane.yaml`의 `TODO`(파일 경로, CSV 헤더, 보정값)를 채운 뒤 실행하고, `main_vio_kf.m`의 `data_dir`을 `data/insane`으로 바꾼다.
+**처음 공부할 때 순서**: `step1_linear_kf.m`(상태 `[p; v]`의 기본 선형 KF, 자세는 정답 사용) → `main_vio_kf.m`(자세·바이어스 추정, 지연 보정 포함 EKF).
+
+**실제 INSANE 데이터**:
+
+```bash
+python inspect_dataset.py ../data/insane_raw/<시퀀스> --out config_<시퀀스>.yaml   # 열 이름·시간단위·Kalibr 자동 탐색
+# → 출력된 '역할 추정'과 초안 yaml 을 눈으로 확인 (특히 IMU 가 PX4 main IMU 인지, kalibr_cam 이 nav camera 인지)
+python of_velocity.py --config config_<시퀀스>.yaml                                # → ../data/insane/*.csv
+```
+
+그다음 `main_vio_kf.m`의 `data_dir`을 `data/insane`으로 바꿔 실행한다. 카메라 보정은 Kalibr `camchain-imucam.yaml`을 그대로 읽는다 (`kalibr_yaml`).
 
 ## 합성 데이터 검증 결과 (60 s, 8자 비행, 고도 2.2~3.8 m)
 
@@ -96,5 +110,6 @@ main_vio_kf
 - **자이로 바이어스 → OF 속도**: 처음에는 이 항이 없어서 위치가 한쪽으로 꾸준히 드리프트했다. 화각이 90°로 넓으면 `Z·(광축×b_g)` 근사로는 부족하다(가장자리에서 `1+x²`배). 그래서 Python이 정확한 M을 계산해 넘긴다.
 - **평면 가정**: 지면이 광축에 수직이라고 가정한다(깊이 = LRF 값 하나). 기울어진 상태에서 v_z에 ±0.05 m/s 정도의 파형 오차가 생기고, 속도 스케일이 약 1% 작게 나온다. 개선하려면 EKF 자세로 지면 법선을 구해 깊이를 픽셀마다 계산하면 된다.
 - **위치와 yaw는 관측되지 않는다** (속도만 측정하므로). 오래 날면 천천히 드리프트한다. VIO(MSCKF)에서도 마찬가지다.
-- `config_insane.yaml`의 CSV 헤더 이름은 데이터를 내려받은 뒤 확인해야 한다 (논문에 정확한 열 이름이 없음).
-- RAFT 백엔드는 이 작업 환경에서 PyTorch 서버 접근이 막혀 **실행 검증을 못 했다**. KLT와 DIS는 검증했다 (두 결과의 속도 차이는 평균 0.004 m/s).
+- INSANE 실제 파일은 이 작업 환경에서 내려받을 수 없었다 (서버 차단). 대신 INSANE과 같은 형태의 가짜 시퀀스(ns 단위 epoch 시간, `w_x`/`p_x` 같은 열 이름, IMU 파일 2개, Kalibr YAML)로 `inspect_dataset.py` → `of_velocity.py`를 끝까지 돌려 확인했다. 원래 데모 결과와 같았다 (속도 차이 최대 2e-5 m/s). 실제 열 이름이 다르면 `inspect_dataset.py`의 `PATTERNS`에 추가하면 된다.
+- RAFT 백엔드: torchvision RAFT 호출은 정상 동작하고, 정답 flow를 아는 가짜 모델로 좌표 변환(8의 배수 리사이즈, 샘플링, 왕복 검사)도 정확하다는 것을 확인했다. **학습 가중치는 이 환경에서 받을 수 없어 실제 정확도는 측정하지 못했다.** 인터넷이 되는 PC에서는 처음 실행할 때 자동으로 내려받는다.
+- MATLAB 코드는 Octave 8.4로 실행해 확인했고, MATLAB에서 문제 될 문법이 없는지 정적으로 검사했다. 실제 MATLAB 실행은 아직 하지 못했다.

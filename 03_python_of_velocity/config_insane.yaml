@@ -1,7 +1,9 @@
 # INSANE 데이터셋 (Brommer et al., IJRR 2024) 용 설정 템플릿
 #   센서: nav camera(하향, 20 Hz) / PX4 IMU(200 Hz) / LRF Garmin Lidar Lite v3(30 Hz, 카메라와 co-mount)
 #   정답: 실내 = OptiTrack mocap(ground_truth.csv), 실외 = RTK GNSS(ground_truth_8hz/80hz.csv)
-#   ※ 아래 파일 경로/헤더 이름은 시퀀스를 내려받은 뒤 실제 CSV 헤더를 보고 반드시 수정 (TODO)
+#
+#   ★ 직접 채우기 전에 먼저:  python inspect_dataset.py <시퀀스 폴더> --out config_<시퀀스>.yaml
+#     → 열 이름 / 시간 단위 / Kalibr 파일을 자동으로 찾아 이 형식의 초안을 만들어 줌
 dataset:
   root: ../data/insane_raw/SEQUENCE_NAME          # TODO
   imu_csv: px4_imu.csv                            # TODO
@@ -16,15 +18,18 @@ dataset:
     cam: {t: t, file: file}
     gt:  {t: t, px: p_x, py: p_y, pz: p_z, qw: q_w, qx: q_x, qy: q_y, qz: q_z}
 
+# 카메라 보정: Kalibr camchain YAML 을 그대로 읽음 (K, D, 왜곡모델, T_cam_imu, timeshift_cam_imu)
+kalibr_yaml: ../data/insane_raw/SEQUENCE_NAME/calib/camchain-imucam.yaml   # TODO
+kalibr_cam: cam0                                  # TODO: 하향 nav camera 의 키
+
 calib:
-  # 데이터셋 제공 YAML(카메라-IMU 보정)에서 옮겨 적기.  Kalibr 형식이면 T_cam_imu 만 넣으면
-  # R_BC, r_BC 는 자동 계산됨.
-  K: [fx, fy, cx, cy]                             # TODO
-  dist_model: radtan                              # radtan | equidistant
-  D: [0.0, 0.0, 0.0, 0.0]                         # TODO
-  T_cam_imu: [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]   # TODO
-  timeshift_cam_imu: 0.0                          # TODO: Kalibr timeshift (t_imu = t_cam + shift)
-  lrf_delay: 0.0                                  # 모르면 0 → 나중에 상호상관으로 추정
+  # 아래 값은 kalibr_yaml 보다 우선함. Kalibr 파일이 없을 때만 주석 해제해서 직접 입력.
+  # K: [fx, fy, cx, cy]
+  # dist_model: radtan                            # radtan | equidistant
+  # D: [0.0, 0.0, 0.0, 0.0]
+  # T_cam_imu: [[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]
+  # timeshift_cam_imu: 0.0                        # t_imu = t_cam + shift
+  lrf_delay: 0.0                                  # 모르면 0
   proc_latency: 0.030
   lrf_min: 0.10
   lrf_max: 25.0                                   # 논문: 25~30 m 이상에서 0 값 출력

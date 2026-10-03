@@ -354,22 +354,45 @@ def save_gt(gt, path):
         path, index=False, float_format="%.6f")
 
 
+def load_kalibr(path, cam="cam0"):
+    """Kalibr camchain-imucam.yaml → calib 항목 (INSANE 보정 파일 형식)."""
+    k = yaml.safe_load(Path(path).read_text())[cam]
+    if k.get("camera_model", "pinhole") != "pinhole":
+        raise ValueError(f"지원하지 않는 camera_model: {k['camera_model']}")
+    return {"K": k["intrinsics"], "D": k["distortion_coeffs"],
+            "dist_model": k["distortion_model"], "T_cam_imu": k["T_cam_imu"],
+            "timeshift_cam_imu": k.get("timeshift_cam_imu", 0.0)}
+
+
+def load_config(path):
+    """
+    calib 우선순위 (뒤가 앞을 덮어씀):
+        kalibr_yaml  <  calib_file  <  config 의 calib 항목
+    """
+    cfg = yaml.safe_load(Path(path).read_text())
+    cfg["_dir"] = str(Path(path).resolve().parent)
+    base = Path(cfg["_dir"])
+    c = {}
+    if cfg.get("kalibr_yaml"):
+        c.update(load_kalibr(base / cfg["kalibr_yaml"], cfg.get("kalibr_cam", "cam0")))
+    if cfg.get("calib_file"):
+        c.update(yaml.safe_load((base / cfg["calib_file"]).read_text()))
+    c.update(cfg.get("calib") or {})
+    if "T_cam_imu" in c:                          # IMU 좌표 → 카메라 좌표  ⇒  R_BC, r_BC
+        T = np.array(c["T_cam_imu"], float)
+        c["R_BC"] = T[:3, :3].T.tolist()
+        c["r_BC"] = (-T[:3, :3].T @ T[:3, 3]).tolist()
+    cfg["calib"] = c
+    return cfg
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config_demo.yaml")
     ap.add_argument("--backend", choices=["klt", "dis", "raft"])
     ap.add_argument("--max-frames", type=int)
     a = ap.parse_args()
-    cfg = yaml.safe_load(Path(a.config).read_text())
-    cfg["_dir"] = str(Path(a.config).resolve().parent)
-    if cfg.get("calib_file"):                     # 보정 파일 + config 의 calib 항목 병합
-        base = yaml.safe_load((Path(cfg["_dir"]) / cfg["calib_file"]).read_text())
-        cfg["calib"] = {**base, **(cfg.get("calib") or {})}
-    c = cfg["calib"]
-    if "T_cam_imu" in c:                          # Kalibr 형식 → R_BC, r_BC
-        T = np.array(c["T_cam_imu"], float)       # IMU 좌표 → 카메라 좌표
-        c["R_BC"] = T[:3, :3].T.tolist()
-        c["r_BC"] = (-T[:3, :3].T @ T[:3, 3]).tolist()
+    cfg = load_config(a.config)
     if a.backend:
         cfg["tracker"]["backend"] = a.backend
     cfg["max_frames"] = a.max_frames
