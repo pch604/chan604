@@ -1,96 +1,131 @@
-%% step1_linear_kf.m  ─  1단계: 기본 선형 KF 로 같은 데이터 추종하기
+%   1단계: kalman0802.m 과 같은 구조의 선형 칼만 필터를 드론 데이터에 적용
 %
-%  main_vio_kf.m(2단계)으로 가기 전에, 가장 단순한 '예측-보정' 구조로 먼저 돌려보는 파일.
-%  kalman0802.m 같은 기본 추종 KF 와 같은 모양이다.
+%   kalman0802.m                          이 파일
+%   ─────────────────────────────────    ─────────────────────────────────────────
+%   상태 x = [횡속도 v; 요레이트 r]        x = [위치 p(3); 속도 v(3)]   (월드 좌표)
+%   입력 u = 조향각 delta                 u = 월드 가속도 = R_WB * a_IMU + g
+%   측정 z = [r; ay]  (매 스텝)           z = OF 속도(3), LRF 고도(1)  (들어올 때만)
+%   차량 2DOF 모델 Ac, Bc                 등가속도 운동 Ac = [0 I; 0 0], Bc = [0; I]
+%   True System 을 직접 시뮬레이션        x_true = 정답 데이터(gt.csv)
 %
-%   상태      x = [p; v]  (6x1, 월드 좌표)
-%   예측      x = F x + B u,   u = 월드 가속도 = R_WB * a_IMU + g
-%   측정      OF  : z = R_WB * v_B  (월드 속도)   H = [0 I]
-%             LRF : z = d * cos(기울기) ≈ p_z     H = [0 0 1 0 0 0]
-%
-%  ※ 이해용 단순화: 자세 R_WB 는 '정답(GT)'을 빌려 쓰고, 바이어스·지연은 무시한다.
-%     → 2단계(main_vio_kf.m)에서 바뀌는 것
-%        (1) 자세 R 을 자이로로 직접 추정 (상태에 추가)    (2) 바이어스 b_a, b_g 추정
-%        (3) F, H 가 자세에 따라 변함 (EKF)                (4) 늦게 온 측정 → 과거로 돌아가 재추정
+%   ※ 이해용 단순화: 자세 R_WB 는 정답을 빌려 쓰고, 바이어스·센서 지연은 무시.
+%     → 2단계(main_vio_kf.m)에서 자세·바이어스를 추정하고 지연을 보정한다.
 
 clear; close all; clc;
 addpath(fullfile(fileparts(mfilename('fullpath')), 'lib'));
 data_dir = fullfile(fileparts(mfilename('fullpath')), '..', 'data', 'demo');
 
-imu = read_csv_struct(fullfile(data_dir, 'imu.csv'));
-of  = read_csv_struct(fullfile(data_dir, 'of_meas.csv'));
-lrf = read_csv_struct(fullfile(data_dir, 'lrf.csv'));
-gt  = read_csv_struct(fullfile(data_dir, 'gt.csv'));
+%% 데이터 (kalman0802 의 '차량 파라미터' 자리)
+imu = read_csv_struct(fullfile(data_dir, 'imu.csv'));       % 200 Hz 가속도·각속도
+of  = read_csv_struct(fullfile(data_dir, 'of_meas.csv'));   % 20 Hz OF 속도 (Python 출력)
+lrf = read_csv_struct(fullfile(data_dir, 'lrf.csv'));       % 30 Hz 지면 거리
+gt  = read_csv_struct(fullfile(data_dir, 'gt.csv'));        % 정답
 ex  = read_csv_struct(fullfile(data_dir, 'extrinsic.csv'));
-c_B = reshape([ex.R0 ex.R1 ex.R2 ex.R3 ex.R4 ex.R5 ex.R6 ex.R7 ex.R8], 3, 3) * [0; 0; 1];  % 광축(바디)
-t = imu.t;  N = numel(t);
+R_BC = reshape([ex.R0 ex.R1 ex.R2 ex.R3 ex.R4 ex.R5 ex.R6 ex.R7 ex.R8], 3, 3);
 
-% 정답 자세 (IMU 시각)
-q = interp_gt(gt, t, {'qw','qx','qy','qz'});
-Rgt = zeros(3, 3, N);
-for k = 1:N, Rgt(:, :, k) = quat2rot(q(k, :)); end
+t = imu.t';
+N = length(t);
+Ts = median(diff(t));                                       % 0.005 s
 
-%% 1. 상태 정의 / 초기값
-x = [interp_gt(gt, t(1), {'px','py','pz'}); interp_gt(gt, t(1), {'vx','vy','vz'})];
+q = interp_gt(gt, t, {'qw','qx','qy','qz'});                % 정답 자세 (이해용)
+R_WB = zeros(3, 3, N);
+for k = 1:N, R_WB(:, :, k) = quat2rot(q(k, :)); end
+x_true = [interp_gt(gt, t, {'px','py','pz'}), interp_gt(gt, t, {'vx','vy','vz'})]';
+
+%% 연속 상태공간 -> 이산화
+I3 = eye(3);  O3 = zeros(3);
+Ac = [O3 I3;
+      O3 O3];
+Bc = [O3;
+      I3];
+% c2d(ss(Ac,Bc,...), Ts, 'zoh') 와 같은 값 (Control Toolbox 없이 expm 으로 계산)
+E   = expm([Ac Bc; zeros(3, 9)] * Ts);
+Phi = E(1:6, 1:6);      % = [I Ts*I; 0 I]
+Gam = E(1:6, 7:9);      % = [Ts^2/2*I; Ts*I]
+
+H_of  = [O3 I3];                  % OF  : 속도를 직접 측정
+H_lrf = [0 0 1 0 0 0];            % LRF : 고도 (거리 × cos(기울기))
+
+%% 노이즈 통계 Q, R / 초기 공분산
+Q     = blkdiag(1e-8*I3, 0.05^2*Ts*I3);    % 가속도 잡음(바이어스 포함) → 속도 잡음
+R_of  = 0.08^2 * I3;
+R_lrf = 0.03^2;
 P = diag([0.01 0.01 0.01 0.05 0.05 0.05].^2);
 
-%% 2. 시스템 모델 (dt 는 IMU 주기, 거의 일정)
-dt = median(diff(t));
-I3 = eye(3);  Z3 = zeros(3);
-F = [I3 dt*I3; Z3 I3];
-B = [0.5*dt^2*I3; dt*I3];
-Q = blkdiag(1e-8*I3, (0.05^2*dt)*I3);         % 가속도 잡음(+바이어스 무시분) → 속도 잡음
 g = [0; 0; -9.81];
-
-%% 3. 측정 모델
-H_of  = [Z3 I3];             R_of  = (0.08^2)*I3;
-H_lrf = [0 0 1 0 0 0];       R_lrf = 0.03^2;
-
-% 측정을 가장 가까운 IMU 스텝에 배치 (1단계: 지연 무시, t_valid 그대로 사용)
-k_of  = interp1(t, 1:N, of.t_valid(of.valid == 1), 'nearest', 'extrap');
-i_of  = find(of.valid == 1);
-k_lrf = interp1(t, 1:N, lrf.t_valid, 'nearest', 'extrap');
-
-%% 4. 예측-보정 루프  (기본 KF 그대로)
-X = zeros(N, 6);  X(1, :) = x.';
-for k = 2:N
-    % --- 예측 ---
-    u = Rgt(:, :, k-1) * [imu.ax(k-1); imu.ay(k-1); imu.az(k-1)] + g;
-    x = F*x + B*u;
-    P = F*P*F.' + Q;
-
-    % --- 보정: OF 속도 ---
-    for j = i_of(k_of == k).'
-        z = Rgt(:, :, k) * [of.vx(j); of.vy(j); of.vz(j)];
-        K = P*H_of.' / (H_of*P*H_of.' + R_of);
-        x = x + K*(z - H_of*x);
-        P = (eye(6) - K*H_of)*P;
-    end
-    % --- 보정: LRF 고도 ---
-    for j = find(k_lrf == k).'
-        c = Rgt(:, :, k) * c_B;               % 광축 방향(월드)  →  cos(기울기) = -c_z
-        z = lrf.range(j) * (-c(3));
-        K = P*H_lrf.' / (H_lrf*P*H_lrf.' + R_lrf);
-        x = x + K*(z - H_lrf*x);
-        P = (eye(6) - K*H_lrf)*P;
-    end
-    X(k, :) = x.';
+delta = zeros(3, N);              % 입력 u_k (kalman0802 의 delta 자리)
+for k = 1:N
+    delta(:, k) = R_WB(:, :, k) * [imu.ax(k); imu.ay(k); imu.az(k)] + g;
 end
 
-%% 5. 결과
-Gp = interp_gt(gt, t, {'px','py','pz'});
-Gv = interp_gt(gt, t, {'vx','vy','vz'});
-ep = X(:, 1:3) - Gp;
-fprintf('1단계 선형 KF:  위치 RMSE %.3f m,  최종 오차 %.3f m,  속도 RMSE %.3f m/s\n', ...
-    sqrt(mean(sum(ep.^2, 2))), norm(ep(end, :)), sqrt(mean(sum((X(:, 4:6) - Gv).^2, 2))));
+% 측정 → 가장 가까운 IMU 스텝 번호 (센서마다 주기가 달라 매 스텝 측정이 있지는 않음)
+i_of  = find(of.valid == 1);
+k_of  = interp1(t, 1:N, of.t_valid(i_of), 'nearest', 'extrap');
+k_lrf = interp1(t, 1:N, lrf.t_valid, 'nearest', 'extrap');
+c_B   = R_BC * [0; 0; 1];         % 카메라·LRF 광축 (바디)
 
-figure('Name', 'step1', 'Position', [50 50 900 380]);
-subplot(1, 2, 1); hold on; grid on; axis equal;
-plot(Gp(:, 1), Gp(:, 2), 'k', 'LineWidth', 2); plot(X(:, 1), X(:, 2), 'b');
-xlabel('x [m]'); ylabel('y [m]'); title('Step 1: linear KF (GT attitude)'); legend('GT', 'KF');
-subplot(1, 2, 2); hold on; grid on;
-plot(t, sqrt(sum(ep.^2, 2)), 'b');
-xlabel('t [s]'); ylabel('|p - p_{GT}| [m]'); title('Position error');
+%% 초기값
+x_est(:, 1) = x_true(:, 1);
+z_of_w = nan(3, N);               % 그림용: 월드로 바꾼 OF 측정
+
+%% 칼만 필터
+for k = 2:N
+
+    % Predict (time update)
+    x_minus = Phi*x_est(:, k-1) + Gam*delta(:, k-1);
+    P_minus = Phi*P*Phi' + Q;
+
+    % 이번 스텝에 들어온 측정만 모아서 z, H, R 구성 (없으면 예측값 그대로)
+    z = [];  H = [];  R = [];
+    for j = i_of(k_of == k)'
+        z_k = R_WB(:, :, k) * [of.vx(j); of.vy(j); of.vz(j)];
+        z = [z; z_k];  H = [H; H_of];  R = blkdiag(R, R_of);
+        z_of_w(:, k) = z_k;
+    end
+    for j = find(k_lrf == k)'
+        c = R_WB(:, :, k) * c_B;                     % 광축(월드) → cos(기울기) = -c(3)
+        z = [z; lrf.range(j) * (-c(3))];  H = [H; H_lrf];  R = blkdiag(R, R_lrf);
+    end
+
+    % Update (measurement update)
+    if isempty(z)
+        x_est(:, k) = x_minus;
+        P = P_minus;
+    else
+        S = H*P_minus*H' + R;
+        K = P_minus*H'/S;
+        x_est(:, k) = x_minus + K*(z - H*x_minus);
+        P = (eye(6) - K*H)*P_minus;
+    end
+end
+
+%% 결과
+e = x_est - x_true;
+fprintf('1단계 선형 KF:  위치 RMSE %.3f m,  최종 오차 %.3f m,  속도 RMSE %.3f m/s\n', ...
+    sqrt(mean(sum(e(1:3, :).^2, 1))), norm(e(1:3, end)), sqrt(mean(sum(e(4:6, :).^2, 1))));
+
+figure('Position', [50 50 1000 650])
+
+subplot(221)
+plot(x_true(1,:), x_true(2,:), 'b--', x_est(1,:), x_est(2,:), 'r'); grid; axis equal
+xlabel('x (m)'); ylabel('y (m)')
+legend('True', 'Estimated')
+
+subplot(222)
+plot(t, x_true(3,:), 'b--', t, x_est(3,:), 'r'); grid
+xlabel('time (sec)'); ylabel('Altitude (m)')
+legend('True', 'Estimated')
+
+subplot(223)
+ok = ~isnan(z_of_w(1,:));
+plot(t(ok), z_of_w(1,ok), 'c.', t, x_true(4,:), 'b--', t, x_est(4,:), 'r'); grid
+xlabel('time (sec)'); ylabel('v_x (m/sec)')
+legend('Measured (OF)', 'True', 'Estimated')
+
+subplot(224)
+plot(t, sqrt(sum(e(1:3,:).^2, 1)), 'r'); grid
+xlabel('time (sec)'); ylabel('Position error (m)')
+
 fig_dir = fullfile(fileparts(mfilename('fullpath')), 'figures');
 if ~exist(fig_dir, 'dir'), mkdir(fig_dir); end
 save_fig(fig_dir, 'fig0_step1_linear_kf');

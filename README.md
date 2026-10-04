@@ -11,7 +11,7 @@
 03_python_of_velocity/  ① OF → 회전 제거 → 속도 측정치 + 시간 동기화 (Python)
                            of_velocity.py / inspect_dataset.py(실데이터 점검) / make_demo_data.py(합성)
 04_matlab_kf/           ② 상태 정의 → EKF → 위치 추정 → RMSE, 그림 (MATLAB)
-                           step1_linear_kf.m(기본 KF) → main_vio_kf.m(최종 EKF)
+                           kalman0802.m(원본, 차량 2DOF) → step1_linear_kf.m(같은 구조, 드론) → main_vio_kf.m(최종 EKF)
 data/demo/              Python 출력(합성 데이터) → MATLAB 입력.  바로 실행 가능
 99_기타/                예전 명령어 메모 (ROS / 경로 생성)
 ```
@@ -77,7 +77,7 @@ cd 04_matlab_kf
 main_vio_kf
 ```
 
-**처음 공부할 때 순서**: `step1_linear_kf.m`(상태 `[p; v]`의 기본 선형 KF, 자세는 정답 사용) → `main_vio_kf.m`(자세·바이어스 추정, 지연 보정 포함 EKF).
+**처음 공부할 때 순서**: `kalman0802.m`(원본) → `step1_linear_kf.m`(같은 변수명 `Phi, Gam, x_minus, P_minus, S, K`로 드론 데이터에 적용, 자세는 정답 사용) → `main_vio_kf.m`(자세·바이어스 추정, 지연 보정 포함 EKF). 파일마다 맨 위 주석에 앞 단계와의 대응표가 있다.
 
 **실제 INSANE 데이터**:
 

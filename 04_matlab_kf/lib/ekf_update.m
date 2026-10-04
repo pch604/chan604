@@ -1,5 +1,6 @@
 function [x, P, nis] = ekf_update(x, P, z, h, H, R)
-% 보정 단계 ── 선형 KF 와 같은 식.  다른 점은 마지막 '주입(injection)' 뿐.
+% 보정 단계 ── kalman0802 의 S, K, x_est = x_minus + K*(z - H*x_minus) 와 같은 식.
+% 다른 점: (1) H*x 대신 비선형 h(x)   (2) 마지막 '주입(injection)'   (3) Joseph form P
 y = z - h;                                 % 잔차 (innovation)
 S = H*P*H.' + R;
 K = P*H.' / S;                             % 칼만 이득

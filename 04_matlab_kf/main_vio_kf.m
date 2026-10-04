@@ -4,15 +4,15 @@
 %         imu.csv, of_meas.csv, lrf.csv, extrinsic.csv, gt.csv(평가용)
 %  출력 : RMSE 표 + figures/*.png
 %
-%  ── 기본 선형 KF(예: kalman0802.m 같은 '추종' 필터)에서 무엇이 바뀌었나 ──
-%   기본 KF                          이 코드 (Error-State EKF)
-%   x = [p; v]                       x = {p, v, R, b_a, b_g},  오차 δx 15차
-%   x = F x + B u  (u: 가속도 명령)   IMU 가속도/각속도로 비선형 적분     → ekf_predict.m
-%   F, Q 고정                        F, Q 를 매 스텝 현재 자세로 계산    → ekf_predict.m
-%   z = H x  (위치 측정)             z = v_B (OF 속도), d (LRF 거리)    → meas_*.m
-%   R 고정                           R = (σ_flow·거리)²,  σ_flow 를 영상 품질 Q 로 조절
-%   x = x + K(z - Hx)                p,v,b 는 더하고 R 은 R·Exp(δθ)     → ekf_update.m
-%   측정은 매 스텝 동시에            주기·지연이 다른 측정 → 과거로 돌아가 재추정 → run_filter.m
+%  ── kalman0802.m(차량 2DOF 선형 KF) → step1_linear_kf.m → 이 파일 ──
+%   kalman0802.m                     이 파일 (Error-State EKF)
+%   x = [v; r]  (2개)                x = {p, v, R, b_a, b_g},  오차 δx 15개
+%   u = 조향각 delta                 u = IMU 가속도·각속도                → ekf_predict.m
+%   Phi, Gam = c2d(Ac, Bc) 상수      Phi 를 매 스텝 현재 자세로 계산       → ekf_predict.m
+%   z = H x + Du u  (매 스텝)        z = v_B (OF), d (LRF), 들어올 때만   → meas_*.m
+%   R 고정 (코드에선 R*10 사용)      R = (σ_flow·거리)²,  σ_flow 를 영상 품질 Q 로 조절
+%   x_est = x_minus + K(z - H x)     p,v,b 는 더하고 R 은 R·Exp(δθ)       → ekf_update.m
+%   측정 지연 없음                   늦게 온 측정 → 과거로 돌아가 재추정  → run_filter.m
 %
 %  비교하는 방법 (연구계획서와 동일)
 %   A : IMU 단독 (관성항법)
